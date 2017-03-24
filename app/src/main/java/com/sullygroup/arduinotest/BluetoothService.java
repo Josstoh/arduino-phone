@@ -44,6 +44,7 @@ public class BluetoothService extends Service {
 
     Handler btInHandler;
     public static final String TAG = "BluetoothService";
+    protected boolean isWorkingWithJob = false;
 
     private BroadcastReceiver mMessageReceiver = new BroadcastReceiver() {
         @Override
@@ -53,8 +54,14 @@ public class BluetoothService extends Service {
             switch(intent.getAction())
             {
                 case TempAndHumService.EVENT_SEND_REQUEST:
-                    command = intent.getStringExtra("command");
-                    sendToBTDevice(command);
+                    if(!isWorkingWithJob){
+                        isWorkingWithJob = true;
+                        command = intent.getStringExtra("command");
+                        sendToBTDevice(command);
+                    }
+                    else {
+                        Log.d(TAG,"BT Service busy");
+                    }
                     break;
             }
 
@@ -235,7 +242,7 @@ public class BluetoothService extends Service {
         }
 
         //write method
-        public void write(String command) {
+        void write(String command) {
             if(!isFetchingData) {
                 try {
                     byte[] d = new byte[30];
@@ -246,6 +253,7 @@ public class BluetoothService extends Service {
                         isFetchingData = true;
                     }
                     mCurrentFetchingOperation = command;
+                    isWorkingWithJob = false;
                     Log.d(TAG,"write");
                 } catch (IOException e) {
                     e.printStackTrace();
@@ -253,6 +261,8 @@ public class BluetoothService extends Service {
                 }
             } else {
                 Toast.makeText(getApplicationContext(), "Wait for last request to finish", Toast.LENGTH_SHORT).show();
+                Log.d(TAG,"isfetchingdata");
+                isWorkingWithJob = false;
             }
         }
 

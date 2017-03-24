@@ -67,8 +67,8 @@ public class TempAndHumService extends Service implements GoogleApiClient.Connec
     public static final String CONNECT_TO_ARDUINO_MESSAGE_PATH = "/connect_to_arduino";
 
     public static  final int TEMP_AND_HUM_JOB_ID = 0;
-    public static  final int ROTATE_JOB_ID = 0;
-    public static  final int LED_COLOR_JOB_ID = 0;
+    public static  final int ROTATE_JOB_ID = 1;
+    public static  final int LED_COLOR_JOB_ID = 2;
 
     private NotificationManager mNM;
     private int idNotification = 2;
@@ -398,7 +398,7 @@ public class TempAndHumService extends Service implements GoogleApiClient.Connec
                 PersistableBundle bundle = new PersistableBundle(1);
                 bundle.putString("command",DetailActivity.COLOR_CMD + red + ";" + green + ";" + blue);
                 builder.setExtras(bundle);
-                builder.setOverrideDeadline(50);
+                builder.setOverrideDeadline(800);
                 if( mJobScheduler.schedule( builder.build() ) <= 0 ) {
                     Log.d(TAG,"JobScheduler : Something went wrong...");
                 }
