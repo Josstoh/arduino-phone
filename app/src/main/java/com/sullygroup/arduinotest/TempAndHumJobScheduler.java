@@ -11,6 +11,7 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.os.Binder;
 import android.os.IBinder;
+import android.os.PersistableBundle;
 import android.support.v4.content.LocalBroadcastManager;
 import android.util.Log;
 import android.widget.Toast;
@@ -30,10 +31,12 @@ public class TempAndHumJobScheduler extends JobService {
         @Override
         public void onReceive(Context context, Intent intent) {
             Log.d(TAG, intent.getAction());
-            Float f;
             switch(intent.getAction())
             {
                 case TempAndHumService.EVENT_RESPONSE_RECEIVED:
+                    Log.d(TAG,"response received");
+                    responseReceived = true;
+                    break;
             }
 
         }
@@ -63,10 +66,13 @@ public class TempAndHumJobScheduler extends JobService {
     @Override
     public void onDestroy() {
         Log.d(TAG,"onDestroy");
+        LocalBroadcastManager.getInstance(this).unregisterReceiver(mMessageReceiver);
     }
 
     @Override
     public boolean onStartJob(JobParameters params) {
+        Log.d(TAG,"new job");
+        responseReceived = false;
         tempAndHumThread = new GetTempAndHumThread(params);
         tempAndHumThread.start();
         return true;
@@ -90,11 +96,31 @@ public class TempAndHumJobScheduler extends JobService {
             super.run();
             try {
                 Log.d(TAG,"thread tahjs");
-                Tools.sendCommand(getApplicationContext(),DetailActivity.TEMP_AND_HUM_CMD);
-                if (Thread.interrupted()) {
-                    throw new InterruptedException();
+                PersistableBundle bundle = params.getExtras();
+                if(bundle != null)
+                {
+                    String command = bundle.getString("command");
+                    if(command != null && !command.isEmpty())
+                    {
+                        Tools.sendCommand(getApplicationContext(),command);
+                        Thread.sleep(750);
+                        /*if (Thread.interrupted()) {
+                            throw new InterruptedException();
+                        }*/
+                        if(!Tools.willWaitForResponse(command))
+                            jobFinished( params, false );
+                        else {
+                            if(!responseReceived)
+                                Log.e(TAG,"Response not received in time, rescheduling...");
+                            jobFinished( params, !responseReceived );
+                        }
+                    }
                 }
-                jobFinished( params, false );
+                else {
+                    Log.e(TAG,"Empty bundle...");
+                    jobFinished( params, false );
+                }
+
             } catch(InterruptedException e) {
                 Log.d(TAG,"Thread interrupted");
             }

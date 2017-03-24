@@ -159,7 +159,7 @@ public class DetailActivity extends AppCompatActivity implements TempAndHumServi
         mHumidityButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                Tools.sendCommand(getApplicationContext(),"e");
+
             }
         });
         mClearButton.setOnClickListener(new View.OnClickListener() {

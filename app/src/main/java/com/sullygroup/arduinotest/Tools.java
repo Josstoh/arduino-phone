@@ -40,4 +40,8 @@ public class Tools {
     public static boolean checkValueColor(int value){
         return checkValue(value,0,255);
     }
+
+    public static boolean willWaitForResponse(String command) {
+        return command.startsWith(DetailActivity.HUMIDITY_CMD) && command.startsWith(DetailActivity.TEMPERATURE_CMD) && command.startsWith(DetailActivity.TEMP_AND_HUM_CMD);
+    }
 }

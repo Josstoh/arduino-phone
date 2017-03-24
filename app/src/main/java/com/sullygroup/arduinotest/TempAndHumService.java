@@ -17,6 +17,7 @@ import android.graphics.drawable.Icon;
 import android.os.Binder;
 import android.os.Bundle;
 import android.os.IBinder;
+import android.os.PersistableBundle;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 import android.support.v4.content.LocalBroadcastManager;
@@ -64,6 +65,10 @@ public class TempAndHumService extends Service implements GoogleApiClient.Connec
     public static final String PATH_ROT = "/rotate";
 
     public static final String CONNECT_TO_ARDUINO_MESSAGE_PATH = "/connect_to_arduino";
+
+    public static  final int TEMP_AND_HUM_JOB_ID = 0;
+    public static  final int ROTATE_JOB_ID = 0;
+    public static  final int LED_COLOR_JOB_ID = 0;
 
     private NotificationManager mNM;
     private int idNotification = 2;
@@ -213,7 +218,8 @@ public class TempAndHumService extends Service implements GoogleApiClient.Connec
             Log.d(TAG,"messageapi type " + CONNECT_TO_ARDUINO_MESSAGE_PATH);
             try {
                 String command = new String(messageEvent.getData(), StandardCharsets.UTF_8);
-                Tools.sendCommand(this,command);
+                int angle = Integer.valueOf(command.substring(1));
+                requestRotate(angle);
             }
             catch(Exception e) {
                 Log.e(TAG,"A String Object is requested.");
@@ -240,9 +246,12 @@ public class TempAndHumService extends Service implements GoogleApiClient.Connec
 
     public void setAutoUpdate(boolean b) {
         if(b && !isAutoUpdating) {
-            JobInfo.Builder builder = new JobInfo.Builder( 1,
+            JobInfo.Builder builder = new JobInfo.Builder( TEMP_AND_HUM_JOB_ID,
                     new ComponentName( getPackageName(),
                             TempAndHumJobScheduler.class.getName() ) );
+            PersistableBundle bundle = new PersistableBundle(1);
+            bundle.putString("command",DetailActivity.TEMP_AND_HUM_CMD);
+            builder.setExtras(bundle);
             builder.setPeriodic(5000);
             if( mJobScheduler.schedule( builder.build() ) <= 0 ) {
                 //If something goes wrong
@@ -266,7 +275,8 @@ public class TempAndHumService extends Service implements GoogleApiClient.Connec
         txTemp += (temp==-1) ? "N/A ": temp+"C°\n";
         txTemp += "Hum.:";
         txTemp += (hum==-1) ? "N/A ": hum+"%\n";
-        //txTemp += (hum==-1) ? "N/A ": hum+"%\n";
+        txTemp += "Rot.:";
+        txTemp += (rotate==-1) ? "N/A ": rotate+"°\n";
 
         PendingIntent contentIntent = PendingIntent.getActivity(this, 0,
                 new Intent(this, DetailActivity.class), 0);
@@ -353,7 +363,17 @@ public class TempAndHumService extends Service implements GoogleApiClient.Connec
     public boolean requestRotate(int angle) {
         try{
             if(Tools.checkValue(angle,0,145)) {
-                Tools.sendCommand(this,DetailActivity.ROTATE_CMD + angle);
+                //Tools.sendCommand(this,DetailActivity.ROTATE_CMD + angle);
+                JobInfo.Builder builder = new JobInfo.Builder( ROTATE_JOB_ID,
+                        new ComponentName( getPackageName(),
+                                TempAndHumJobScheduler.class.getName() ) );
+                PersistableBundle bundle = new PersistableBundle(1);
+                bundle.putString("command",DetailActivity.ROTATE_CMD + angle);
+                builder.setExtras(bundle);
+                builder.setOverrideDeadline(2000);
+                if( mJobScheduler.schedule( builder.build() ) <= 0 ) {
+                    Log.d(TAG,"JobScheduler : Something went wrong...");
+                }
                 updateStat(TYPE_ROT,angle);
                 return true;
             }
@@ -372,7 +392,16 @@ public class TempAndHumService extends Service implements GoogleApiClient.Connec
     public void requestLEDColor(int red, int green, int blue) {
         try{
             if(Tools.checkValueColor(red) && Tools.checkValueColor(green) && Tools.checkValueColor(blue)) {
-                Tools.sendCommand(this,DetailActivity.COLOR_CMD + red + ";" + green + ";" + blue);
+                JobInfo.Builder builder = new JobInfo.Builder( LED_COLOR_JOB_ID,
+                        new ComponentName( getPackageName(),
+                                TempAndHumJobScheduler.class.getName() ) );
+                PersistableBundle bundle = new PersistableBundle(1);
+                bundle.putString("command",DetailActivity.COLOR_CMD + red + ";" + green + ";" + blue);
+                builder.setExtras(bundle);
+                builder.setOverrideDeadline(50);
+                if( mJobScheduler.schedule( builder.build() ) <= 0 ) {
+                    Log.d(TAG,"JobScheduler : Something went wrong...");
+                }
             }
             else
                 Toast.makeText(getBaseContext(),"Each field must be a number between 0 and 255.",Toast.LENGTH_LONG).show();
