@@ -47,19 +47,9 @@ import java.util.ArrayList;
 import java.util.TimerTask;
 
 public class DetailActivity extends AppCompatActivity implements TempAndHumService.TempAndHumServiceListener{
-    private static final String DEBUG_TAG = "debug_tag";
-
-    public static final String TEMPERATURE_CMD = "a";
-    public static final String HUMIDITY_CMD = "b";
-    public static final String ROTATE_CMD = "c";
-    public static final String COLOR_CMD = "d";
-    public static final String TEMP_AND_HUM_CMD = "e";
     private static final String TAG = "DetailActivity";
 
-    GoogleApiClient mGoogleApiClient;
-
     private ServiceConnection mConnection = new ServiceConnection() {
-
         @Override
         public void onServiceConnected(ComponentName className, IBinder service) {
             Toast.makeText(DetailActivity.this, "onServiceConnected called "+ className.getShortClassName(), Toast.LENGTH_SHORT).show();
@@ -83,6 +73,8 @@ public class DetailActivity extends AppCompatActivity implements TempAndHumServi
             switch (className.getShortClassName())
             {
                 case "."+TempAndHumService.TAG:
+                    tahService.unRegisterClient();
+                    tahService = null;
                     break;
             }
         }
@@ -102,8 +94,6 @@ public class DetailActivity extends AppCompatActivity implements TempAndHumServi
     private Button mRotateButton;
     private EditText mAngleRotate;
     private SeekBarHint mSeekbar;
-    private boolean isFetchingData = false;
-    private Handler handlerTimeout;
     public TextView hintSeekBar;
     private EditText etRed;
     private EditText etGreen;
@@ -127,6 +117,7 @@ public class DetailActivity extends AppCompatActivity implements TempAndHumServi
         etGreen = (EditText) findViewById(R.id.et_green);
         etBlue = (EditText) findViewById(R.id.et_blue);
         mChart = (LineChart) findViewById(R.id.activity_detail_chart);
+        mSeekbar = (SeekBarHint) findViewById(R.id.seekBar);
 
         mConnectButton.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -173,8 +164,7 @@ public class DetailActivity extends AppCompatActivity implements TempAndHumServi
             public void onClick(View v) {
                 String strAngle = mAngleRotate.getText().toString();
 
-                if(!strAngle.isEmpty())
-                {
+                if(!strAngle.isEmpty()) {
                     try{
                         int angle = Integer.valueOf(strAngle);
                         if(tahService.requestRotate(angle)){
@@ -183,12 +173,10 @@ public class DetailActivity extends AppCompatActivity implements TempAndHumServi
                     } catch (Exception e) {
                         Toast.makeText(getBaseContext(),"This is not a number",Toast.LENGTH_LONG).show();
                     }
-
                 }
-
             }
         });
-        mSeekbar = (SeekBarHint) findViewById(R.id.seekBar);
+
         mSeekbar.addOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             private int progress;
             @Override
@@ -214,19 +202,6 @@ public class DetailActivity extends AppCompatActivity implements TempAndHumServi
 
         initChart();
         clearChart();
-
-        handlerTimeout = new Handler(Looper.getMainLooper()) {
-            @Override
-            public void handleMessage(Message message) {
-                switch (message.what){
-                    case 0:
-                        Toast.makeText(getBaseContext(),"TIMEOUT... Operation canceled !",Toast.LENGTH_SHORT).show();
-                        break;
-                    case 1:
-                        Toast.makeText(getBaseContext(),"TIMEOUT... Still " + message.obj + " more attempts",Toast.LENGTH_SHORT).show();
-                }
-            }
-        };
 
         hintSeekBar = new TextView(this);
         hintSeekBar.setVisibility(View.GONE);
@@ -258,19 +233,16 @@ public class DetailActivity extends AppCompatActivity implements TempAndHumServi
         });
 
         if(TempAndHumService.isRunning()){
-            //startService(tahServiceIntent);
             bindService(tahServiceIntent, mConnection,Context.BIND_AUTO_CREATE);
         }
     }
 
     @Override
-    protected void onStart() {
-        super.onStart();
-    }
-
-    @Override
-    protected void onStop() {
-        super.onStop();
+    protected void onDestroy() {
+        super.onDestroy();
+        if(tahService != null)
+            tahService.unRegisterClient();
+        unbindService(mConnection);
     }
 
     private void setUiEnabled(final boolean bool) {
@@ -387,7 +359,6 @@ public class DetailActivity extends AppCompatActivity implements TempAndHumServi
     @Override
     public void updateRotate(int angle) {
         mSeekbar.setProgress(angle);
-        //mAngleRotate.setText(angle);
     }
 
     @Override
@@ -396,49 +367,5 @@ public class DetailActivity extends AppCompatActivity implements TempAndHumServi
         tahService = null;
         unbindService(mConnection);
         setUiEnabled(false);
-    }
-
-    private class TimeoutThread extends TimerTask{
-        private int attempts = 3;
-        private boolean send = false;
-        private String command;
-
-        private TimeoutThread(String command) {
-            this.command = command;
-        }
-
-        @Override
-        public void run() {
-
-            if(!isFetchingData)
-            {
-                if(!send){
-                    //onClickSend(command);
-                    send = true;
-                }
-            }
-            else {
-                if(attempts > 0){
-                    attempts--;
-                    Message message = handlerTimeout.obtainMessage(1,attempts);
-                    message.sendToTarget();
-                    isFetchingData = false;
-                    //onClickSend(command);
-                }
-                else{
-                    Message message = handlerTimeout.obtainMessage(0);
-                    message.sendToTarget();
-                    isFetchingData = false;
-                }
-            }
-        }
-    }
-
-    @Override
-    protected void onDestroy() {
-        super.onDestroy();
-        if(tahService != null)
-            tahService.unRegisterClient();
-        unbindService(mConnection);
     }
 }

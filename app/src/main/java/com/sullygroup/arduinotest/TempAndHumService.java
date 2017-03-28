@@ -43,6 +43,8 @@ import com.google.android.gms.wearable.Wearable;
 import java.nio.charset.StandardCharsets;
 
 /**
+ * Service qui gère la connexion avec la carte Arduino par l'intermédiaire du service {@link BluetoothService}
+ * et la gestion des données échangées entre la carte, le téléphone et la montre connectée.
  * Created by jocelyn.caraman on 16/03/2017.
  */
 
@@ -50,6 +52,13 @@ public class TempAndHumService extends Service implements GoogleApiClient.Connec
         GoogleApiClient.OnConnectionFailedListener,
         DataApi.DataListener, MessageApi.MessageListener{
     public final static String TAG = "TempAndHumService";
+
+    // Constantes
+    public static final String TEMPERATURE_CMD = "a";
+    public static final String HUMIDITY_CMD = "b";
+    public static final String ROTATE_CMD = "c";
+    public static final String COLOR_CMD = "d";
+    public static final String TEMP_AND_HUM_CMD = "e";
 
     public static final String EVENT_RESPONSE_RECEIVED = "event_response_received";
     public static final String EVENT_DEVICE_CONNECTED = "event_device_connected";
@@ -69,7 +78,7 @@ public class TempAndHumService extends Service implements GoogleApiClient.Connec
     public static  final int TEMP_AND_HUM_JOB_ID = 0;
     public static  final int ROTATE_JOB_ID = 1;
     public static  final int LED_COLOR_JOB_ID = 2;
-
+// -------------------------------------------------------------------------------------
     private NotificationManager mNM;
     private int idNotification = 2;
 
@@ -149,23 +158,25 @@ public class TempAndHumService extends Service implements GoogleApiClient.Connec
 
         mNM = (NotificationManager)getSystemService(NOTIFICATION_SERVICE);
         Log.d(TAG, "SERVICE CREATED");
-        showNotification();
 
     }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         Log.d(TAG, "startcommand");
-        String action = intent.getAction();
-        if(action != null)
-        {
-            if(action.equals("STOP_SERVICE")){
-                Log.d(TAG,"stop");
-                stop();
-                return START_NOT_STICKY;
+        if(intent != null) {
+            String action = intent.getAction();
+            if(action != null)
+            {
+                if(action.equals("STOP_SERVICE")){
+                    Log.d(TAG,"stop");
+                    stop();
+                    return START_NOT_STICKY;
+                }
             }
+            return START_STICKY;
         }
-        return START_STICKY;
+        return START_NOT_STICKY;
     }
 
     @Override
@@ -204,7 +215,9 @@ public class TempAndHumService extends Service implements GoogleApiClient.Connec
                 Log.d(TAG, "DataItem changed: " + event.getDataItem().getUri());
                 if(item.getUri().getPath().compareTo("/rotate") == 0) {
                     DataMap dataMap = DataMapItem.fromDataItem(item).getDataMap();
-                    activity.updateRotate(dataMap.getInt("value"));
+                    rotate = dataMap.getInt("value");
+                    if(activity != null)
+                        activity.updateRotate(rotate);
                 }
             }
         }
@@ -250,7 +263,7 @@ public class TempAndHumService extends Service implements GoogleApiClient.Connec
                     new ComponentName( getPackageName(),
                             TempAndHumJobScheduler.class.getName() ) );
             PersistableBundle bundle = new PersistableBundle(1);
-            bundle.putString("command",DetailActivity.TEMP_AND_HUM_CMD);
+            bundle.putString("command",TEMP_AND_HUM_CMD);
             builder.setExtras(bundle);
             builder.setPeriodic(5000);
             if( mJobScheduler.schedule( builder.build() ) <= 0 ) {
@@ -352,7 +365,7 @@ public class TempAndHumService extends Service implements GoogleApiClient.Connec
         if(activity != null)
             activity.onServiceClosing();
         mJobScheduler.cancelAll();
-        //stopForeground(true);
+        stopForeground(true);
         stopSelf();
     }
 
@@ -363,18 +376,18 @@ public class TempAndHumService extends Service implements GoogleApiClient.Connec
     public boolean requestRotate(int angle) {
         try{
             if(Tools.checkValue(angle,0,145)) {
-                //Tools.sendCommand(this,DetailActivity.ROTATE_CMD + angle);
                 JobInfo.Builder builder = new JobInfo.Builder( ROTATE_JOB_ID,
                         new ComponentName( getPackageName(),
                                 TempAndHumJobScheduler.class.getName() ) );
                 PersistableBundle bundle = new PersistableBundle(1);
-                bundle.putString("command",DetailActivity.ROTATE_CMD + angle);
+                bundle.putString("command",ROTATE_CMD + angle);
                 builder.setExtras(bundle);
-                builder.setOverrideDeadline(2000);
+                builder.setOverrideDeadline(1);
                 if( mJobScheduler.schedule( builder.build() ) <= 0 ) {
                     Log.d(TAG,"JobScheduler : Something went wrong...");
                 }
-                updateStat(TYPE_ROT,angle);
+                rotate = angle;
+                updateStat(TYPE_ROT,rotate);
                 return true;
             }
             else
@@ -396,9 +409,9 @@ public class TempAndHumService extends Service implements GoogleApiClient.Connec
                         new ComponentName( getPackageName(),
                                 TempAndHumJobScheduler.class.getName() ) );
                 PersistableBundle bundle = new PersistableBundle(1);
-                bundle.putString("command",DetailActivity.COLOR_CMD + red + ";" + green + ";" + blue);
+                bundle.putString("command",COLOR_CMD + red + ";" + green + ";" + blue);
                 builder.setExtras(bundle);
-                builder.setOverrideDeadline(800);
+                builder.setOverrideDeadline(1);
                 if( mJobScheduler.schedule( builder.build() ) <= 0 ) {
                     Log.d(TAG,"JobScheduler : Something went wrong...");
                 }

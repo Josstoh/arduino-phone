@@ -1,6 +1,7 @@
 package com.sullygroup.arduinotest;
 
 import android.app.Service;
+import android.app.job.JobParameters;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothSocket;
@@ -9,7 +10,11 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.os.Handler;
+import android.os.HandlerThread;
 import android.os.IBinder;
+import android.os.Looper;
+import android.os.Message;
+import android.os.PersistableBundle;
 import android.support.annotation.Nullable;
 import android.support.v4.content.LocalBroadcastManager;
 import android.util.Log;
@@ -21,16 +26,17 @@ import java.io.OutputStream;
 import java.util.UUID;
 
 /**
+ * Service gérant la connexion Bluetooth entre le téléphone et la carte Arduino. Son cycle de vie
+ * est géré par {@link TempAndHumService}
  * Created by jocelyn.caraman on 15/03/2017.
  */
 
 public class BluetoothService extends Service {
-    final int handlerState = 0;
-    private String mCurrentFetchingOperation;
     private static final String DEVICE_ADDRESS = "98:D3:31:FC:40:F8";
     private static final UUID PORT_UUID = UUID.fromString("00001101-0000-1000-8000-00805f9b34fb");
 
-    byte buffer[];
+    private String mCurrentFetchingOperation;
+
     boolean stopThread;
     private boolean isFetchingData = false;
 
@@ -39,8 +45,8 @@ public class BluetoothService extends Service {
 
     private ConnectingThread mConnectingThread;
     private ConnectedThread mConnectedThread;
-
-    private StringBuilder recDataString = new StringBuilder();
+    private SendMessageHandler sendMessageHandler;
+    private Looper looper;
 
     Handler btInHandler;
     public static final String TAG = "BluetoothService";
@@ -55,9 +61,10 @@ public class BluetoothService extends Service {
             {
                 case TempAndHumService.EVENT_SEND_REQUEST:
                     if(!isWorkingWithJob){
-                        isWorkingWithJob = true;
+                        isWorkingWithJob = false;
                         command = intent.getStringExtra("command");
-                        sendToBTDevice(command);
+                        Message msg = sendMessageHandler.obtainMessage(1,command);
+                        sendMessageHandler.sendMessage(msg);
                     }
                     else {
                         Log.d(TAG,"BT Service busy");
@@ -79,17 +86,6 @@ public class BluetoothService extends Service {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        btInHandler = new Handler() {
-
-            public void handleMessage(android.os.Message msg) {
-                if (msg.what == handlerState) {
-                    String readMessage = (String) msg.obj;
-                    recDataString.append(readMessage);
-                    Log.d("RECORDED", recDataString.toString());
-                }
-                recDataString.delete(0, recDataString.length());
-            }
-        };
         BTinit();
         return super.onStartCommand(intent, flags, startId);
     }
@@ -139,7 +135,6 @@ public class BluetoothService extends Service {
         @Override
         public void run() {
             super.run();
-            //btAdapter.cancelDiscovery();
             try {
                 mmSocket.connect();
                 mConnectedThread = new ConnectedThread(mmSocket);
@@ -157,7 +152,6 @@ public class BluetoothService extends Service {
 
         void closeSocket() {
             try {
-                //Don't leave Bluetooth sockets open when leaving activity
                 mmSocket.close();
             } catch (IOException e2) {
                 onCatchException(e2,"SOCKET CLOSING FAILED, STOPPING SERVICE");
@@ -183,6 +177,10 @@ public class BluetoothService extends Service {
             }
             mmOutStream = tmpOut;
             mmInStream = tmpIn;
+            HandlerThread myThread = new HandlerThread("BTHandlerThread");
+            myThread.start();
+            looper = myThread.getLooper();
+            sendMessageHandler = new SendMessageHandler(looper);
             Log.d(TAG,"Connected to device");
             Tools.sendMessage(getApplicationContext(),TempAndHumService.EVENT_DEVICE_CONNECTED);
         }
@@ -191,14 +189,11 @@ public class BluetoothService extends Service {
             float t,h;
             stopThread = false;
             mStringBuilder = new StringBuilder();
-            // Keep looping to listen for received messages
             while(!Thread.currentThread().isInterrupted() && !stopThread) {
                 try {
                     int byteCount = mmInStream.available();
 
                     if(byteCount > 1) {
-                            /*if(timeoutThread != null)
-                                timeoutThread.cancel();*/
                         byte[] rawBytes = new byte[byteCount];
                         mmInStream.read(rawBytes);
                         final String string = new String(rawBytes, "UTF-8");
@@ -215,14 +210,13 @@ public class BluetoothService extends Service {
                                         h = Float.parseFloat(mStringBuilder.toString());
                                         Tools.sendMessage(getApplicationContext(),TempAndHumService.EVENT_HUM_RECEIVED,h);
                                         break;*/
-                                    case DetailActivity.TEMP_AND_HUM_CMD:
+                                    case TempAndHumService.TEMP_AND_HUM_CMD:
                                         String[] results = mStringBuilder.toString().split(";");
                                         t = Float.parseFloat(results[0]);
                                         h = Float.parseFloat(results[1]);
                                         Tools.sendTempAndHum(getApplicationContext(),t,h);
                                         break;
                                     default:
-                                        btInHandler.obtainMessage(handlerState,"toto").sendToTarget();
                                         break;
                                 }
                             }
@@ -248,10 +242,6 @@ public class BluetoothService extends Service {
                     byte[] d = new byte[30];
                     d = command.getBytes();
                     mmOutStream.write(d);
-                    if(!command.startsWith(DetailActivity.ROTATE_CMD) && !command.startsWith(DetailActivity.COLOR_CMD)){
-                        Log.d(TAG,"fetch");
-                        isFetchingData = true;
-                    }
                     mCurrentFetchingOperation = command;
                     isWorkingWithJob = false;
                     Log.d(TAG,"write");
@@ -271,6 +261,7 @@ public class BluetoothService extends Service {
                 //Don't leave Bluetooth sockets open when leaving activity
                 mmInStream.close();
                 mmOutStream.close();
+                looper.quit();
             } catch (IOException e2) {
                 //insert code to deal with this
                 Log.d("DEBUG BT", e2.toString());
@@ -280,20 +271,12 @@ public class BluetoothService extends Service {
         }
     }
 
-    public void sendToBTDevice(String command) {
-        if(mConnectedThread != null && mConnectedThread.isAlive())
-            mConnectedThread.write(command);
-        else
-            Log.d(TAG,"error");
-    }
-
     @Override
     public void onDestroy() {
         super.onDestroy();
         Log.d(TAG, "onDestroy");
         Tools.sendMessage(this,TempAndHumService.EVENT_BTSERVICE_FAILED);
         LocalBroadcastManager.getInstance(this).unregisterReceiver(mMessageReceiver);
-        btInHandler.removeCallbacksAndMessages(null);
         stopThread = true;
         if (mConnectedThread != null) {
             mConnectedThread.closeStreams();
@@ -320,6 +303,33 @@ public class BluetoothService extends Service {
     @Override
     public IBinder onBind(Intent intent) {
         return null;
+    }
+
+    private class SendMessageHandler extends Handler {
+
+        SendMessageHandler(Looper looper) {
+            super(looper);
+        }
+
+        @Override
+        public void handleMessage(Message msg) {
+            Log.d(TAG,"handler début");
+            if(msg.what == 1){
+                if(mConnectedThread != null && mConnectedThread.isAlive()){
+                    try {
+                        String command = (String)msg.obj;
+                        mConnectedThread.write(command);
+                        Thread.sleep(250);
+                    } catch(Exception e) {
+                        onCatchException(e,"msg.obj is not a String command");
+                    }
+                }
+                else
+                    Log.d(TAG,"error");
+            }
+            Log.d(TAG,"handler fin");
+            super.handleMessage(msg);
+        }
     }
 
 }
