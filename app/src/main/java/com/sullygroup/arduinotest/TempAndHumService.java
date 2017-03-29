@@ -13,7 +13,6 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.graphics.Color;
-import android.graphics.drawable.Icon;
 import android.os.Binder;
 import android.os.Bundle;
 import android.os.IBinder;
@@ -72,6 +71,7 @@ public class TempAndHumService extends Service implements GoogleApiClient.Connec
     public static final String PATH_TEMP = "/stats/temp";
     public static final String PATH_HUM = "/stats/hum";
     public static final String PATH_ROT = "/rotate";
+    public static final String PATH_COLOR = "/color";
 
     public static final String CONNECT_TO_ARDUINO_MESSAGE_PATH = "/connect_to_arduino";
 
@@ -88,6 +88,9 @@ public class TempAndHumService extends Service implements GoogleApiClient.Connec
     private boolean isAutoUpdating = false;
     private final IBinder mBinder = new LocalBinder();
     private TempAndHumServiceListener activity;
+    /**
+     * BroadcastReceiver qui reçoit les messages envoyer grâce au LocalBroadcastManager.
+     */
     private BroadcastReceiver mMessageReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
@@ -106,7 +109,7 @@ public class TempAndHumService extends Service implements GoogleApiClient.Connec
                         temp = (int) t;
                         if(activity != null)
                             activity.onTempResponse(t);
-                        updateStat(TYPE_TEMP, temp);
+                        updateDataItem(TYPE_TEMP, temp);
                         showNotification();
                     }
                     h = intent.getFloatExtra("hum",-100f);
@@ -114,11 +117,12 @@ public class TempAndHumService extends Service implements GoogleApiClient.Connec
                         hum = (int) h;
                         if(activity != null)
                             activity.onHumResponse(h);
-                        updateStat(TYPE_HUM, hum);
+                        updateDataItem(TYPE_HUM, hum);
                         showNotification();
                     }
                     break;
                 case EVENT_BTSERVICE_FAILED:
+                    // il y a eu une erreur dans le BTService, on stoppe ce service aussi...
                     Log.d(TAG,"BTService failed... Stopping service");
                     Toast.makeText(getApplicationContext(),intent.getStringExtra("message"),Toast.LENGTH_LONG).show();
                     stop();
@@ -205,6 +209,9 @@ public class TempAndHumService extends Service implements GoogleApiClient.Connec
         Log.d(TAG, "onConnectionFailed: " + connectionResult);
     }
 
+    /**
+     * Fonction appelée à chaque fois qu'un data item est modifié.
+     */
     @Override
     public void onDataChanged(DataEventBuffer dataEventBuffer) {
         for (DataEvent event : dataEventBuffer) {
@@ -224,6 +231,10 @@ public class TempAndHumService extends Service implements GoogleApiClient.Connec
         dataEventBuffer.release();
     }
 
+    /**
+     * Reçoit les messages de la montre.
+     * @param messageEvent
+     */
     @Override
     public void onMessageReceived(MessageEvent messageEvent) {
         Log.d(TAG,"messageapi reçu");
@@ -231,8 +242,14 @@ public class TempAndHumService extends Service implements GoogleApiClient.Connec
             Log.d(TAG,"messageapi type " + CONNECT_TO_ARDUINO_MESSAGE_PATH);
             try {
                 String command = new String(messageEvent.getData(), StandardCharsets.UTF_8);
-                int angle = Integer.valueOf(command.substring(1));
-                requestRotate(angle);
+                if(command.startsWith(TempAndHumService.ROTATE_CMD)) {
+                    int angle = Integer.valueOf(command.substring(1));
+                    requestRotate(angle);
+                }
+                else if(command.startsWith(TempAndHumService.COLOR_CMD)) {
+                    String[] colors = command.substring(1).split(";");
+                    requestLEDColor(Integer.valueOf(colors[0]),Integer.valueOf(colors[1]),Integer.valueOf(colors[2]));
+                }
             }
             catch(Exception e) {
                 Log.e(TAG,"A String Object is requested.");
@@ -241,22 +258,37 @@ public class TempAndHumService extends Service implements GoogleApiClient.Connec
         }
     }
 
+    /**
+     * Binder pour ce service qui sert à obtenir son instance depuis un Context qui s'y est "bind".
+     */
     class LocalBinder extends Binder {
         TempAndHumService getServiceInstance(){
             return TempAndHumService.this;
         }
     }
 
+    /**
+     * S'inscrire aux appels de ce service.
+     * @param activity l'activité qui veut s'inscrire.
+     */
     public void registerClient(Activity activity){
         Log.d(TAG,"registerClient");
         this.activity = (TempAndHumServiceListener)activity;
     }
 
+    /**
+     * Désinscrire l'activité aux appels de ce service.
+     */
     public void unRegisterClient(){
         Log.d(TAG,"unRegisterClient");
         this.activity = null;
     }
 
+    /**
+     * Active ou désactive l'auto MAJ de la température et de l'humidité depuis le module Arduino.
+     * Càd, active ou non l'envoie régulier de requêtes vers l'Arduino pour obtenir la température et l'humidité.
+     * @param b true pour activer, false pour désactiver.
+     */
     public void setAutoUpdate(boolean b) {
         if(b && !isAutoUpdating) {
             JobInfo.Builder builder = new JobInfo.Builder( TEMP_AND_HUM_JOB_ID,
@@ -278,10 +310,17 @@ public class TempAndHumService extends Service implements GoogleApiClient.Connec
         }
     }
 
+    /**
+     * Affiche la notification pour ce service.
+     */
     private void showNotification() {
         mNM.notify(idNotification, getNotification());
     }
 
+    /**
+     * Crée la notification pour ce service.
+     * @return la notification a afficher pour ce service
+     */
     private Notification getNotification() {
         String txTemp;
         txTemp = "Temp.:";
@@ -326,12 +365,22 @@ public class TempAndHumService extends Service implements GoogleApiClient.Connec
         stopService(btServiceIntent);
     }
 
+    /**
+     * Renvoie si le service est connecté à la carte Arduino ou non.
+     * @return true si vrai sinon false.
+     */
     public boolean isConnectedToDevice()
     {
         return isConnectedToDevice;
     }
 
-    private void updateStat(int typeValue, int value) {
+    /**
+     * Met à jour le data item contenant l'information de type {@param type_value}, afin de
+     * partager l'information avec la montre.
+     * @param typeValue type de l'information à changer, constantes dans {@link TempAndHumService}.
+     * @param value valeur de cette information.
+     */
+    private void updateDataItem(int typeValue, int value) {
         String path="";
         switch (typeValue){
             case TYPE_TEMP:
@@ -361,6 +410,34 @@ public class TempAndHumService extends Service implements GoogleApiClient.Connec
         });
     }
 
+    /**
+     * Met à jour le data item contenant les composants RGB de la couleur de la LED, afin de
+     * partager l'information avec la montre.
+     * @param red composante rouge de RGB.
+     * @param green composante verte de RGB.
+     * @param blue composante bleue de RGB.
+     */
+    private void updateColorDataItem(int red, int green, int blue) {
+        PutDataMapRequest putDataMapReq = PutDataMapRequest.create(PATH_COLOR);
+        putDataMapReq.getDataMap().putInt("red", red);
+        putDataMapReq.getDataMap().putInt("green", green);
+        putDataMapReq.getDataMap().putInt("blue", blue);
+        PutDataRequest putDataReq = putDataMapReq.asPutDataRequest();
+        PendingResult<DataApi.DataItemResult> pendingResult =
+                Wearable.DataApi.putDataItem(mGoogleApiClient, putDataReq);
+        pendingResult.setResultCallback(new ResultCallback<DataApi.DataItemResult>() {
+            @Override
+            public void onResult(final DataApi.DataItemResult result) {
+                if(result.getStatus().isSuccess()) {
+                    Log.d(TAG, "Data item set: " + result.getDataItem().getUri());
+                }
+            }
+        });
+    }
+
+    /**
+     * Stoppe le service et libère les ressources utilisées.
+     */
     private void stop() {
         if(activity != null)
             activity.onServiceClosing();
@@ -369,25 +446,25 @@ public class TempAndHumService extends Service implements GoogleApiClient.Connec
         stopSelf();
     }
 
+    /**
+     * Retourne si une instance du service est déjà lancée.
+     * @return true si oui, false sinon.
+     */
     public static boolean isRunning() {
         return isRunning;
     }
 
+    /**
+     * Envoye une reqûete à la carte Arduino pour changer l'angle du servomoteur.
+     * @param angle l'angle entre 0 et 145
+     * @return true si l'opération a été effectué, false sinon.
+     */
     public boolean requestRotate(int angle) {
         try{
             if(Tools.checkValue(angle,0,145)) {
-                JobInfo.Builder builder = new JobInfo.Builder( ROTATE_JOB_ID,
-                        new ComponentName( getPackageName(),
-                                TempAndHumJobScheduler.class.getName() ) );
-                PersistableBundle bundle = new PersistableBundle(1);
-                bundle.putString("command",ROTATE_CMD + angle);
-                builder.setExtras(bundle);
-                builder.setOverrideDeadline(1);
-                if( mJobScheduler.schedule( builder.build() ) <= 0 ) {
-                    Log.d(TAG,"JobScheduler : Something went wrong...");
-                }
+                Tools.sendCommand(getApplicationContext(),ROTATE_CMD + angle);
                 rotate = angle;
-                updateStat(TYPE_ROT,rotate);
+                updateDataItem(TYPE_ROT,rotate);
                 return true;
             }
             else
@@ -402,19 +479,17 @@ public class TempAndHumService extends Service implements GoogleApiClient.Connec
         }
     }
 
+    /**
+     * Envoye une reqûete à la carte Arduino pour changer la couleur de la LED.
+     * @param red Entier RGB entre 0 et 255 représentant la partie rouge de la couleur.
+     * @param green Entier RGB entre 0 et 255 représentant la partie verte de la couleur.
+     * @param blue Entier RGB entre 0 et 255 représentant la partie bleue de la couleur.
+     */
     public void requestLEDColor(int red, int green, int blue) {
         try{
             if(Tools.checkValueColor(red) && Tools.checkValueColor(green) && Tools.checkValueColor(blue)) {
-                JobInfo.Builder builder = new JobInfo.Builder( LED_COLOR_JOB_ID,
-                        new ComponentName( getPackageName(),
-                                TempAndHumJobScheduler.class.getName() ) );
-                PersistableBundle bundle = new PersistableBundle(1);
-                bundle.putString("command",COLOR_CMD + red + ";" + green + ";" + blue);
-                builder.setExtras(bundle);
-                builder.setOverrideDeadline(1);
-                if( mJobScheduler.schedule( builder.build() ) <= 0 ) {
-                    Log.d(TAG,"JobScheduler : Something went wrong...");
-                }
+                Tools.sendCommand(getApplicationContext(),COLOR_CMD + red + ";" + green + ";" + blue);
+                updateColorDataItem(red,green,blue);
             }
             else
                 Toast.makeText(getBaseContext(),"Each field must be a number between 0 and 255.",Toast.LENGTH_LONG).show();
@@ -423,11 +498,29 @@ public class TempAndHumService extends Service implements GoogleApiClient.Connec
         }
     }
 
+    /**
+     * Interface implémentée par l'activité pour avoir des retours sur ce que fait le service et les MAJs de données.
+     */
     interface TempAndHumServiceListener{
+        /**
+         * Le service est lancé et connecté à l'Arduino grâce au BTService.
+         */
         void onConnected();
+        /**
+         * Une réponse de l'Arduino contenant la température à été reçu.
+         */
         void onTempResponse(float msg);
+        /**
+         * Une réponse de l'Arduino contenant l'humidité à été reçu.
+         */
         void onHumResponse(float msg);
+        /**
+         * L'angle de rotation a été modifié, on prévient l'activité pour MAJ.
+         */
         void updateRotate(int angle);
+        /**
+         * On prévient que le service va s'arrêter.
+         */
         void onServiceClosing();
     }
 }

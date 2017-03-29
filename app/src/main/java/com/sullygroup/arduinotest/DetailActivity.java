@@ -1,19 +1,13 @@
 package com.sullygroup.arduinotest;
 
-import android.app.job.JobInfo;
-import android.app.job.JobScheduler;
 import android.content.ComponentName;
 import android.content.Context;
+import android.content.Intent;
 import android.content.ServiceConnection;
 import android.graphics.Color;
-import android.os.IBinder;
-import android.os.Looper;
-import android.os.Message;
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
-import android.support.v7.app.AppCompatActivity;
-import android.content.Intent;
 import android.os.Bundle;
+import android.os.IBinder;
+import android.support.v7.app.AppCompatActivity;
 import android.util.Log;
 import android.util.TypedValue;
 import android.view.View;
@@ -23,28 +17,15 @@ import android.widget.RelativeLayout;
 import android.widget.SeekBar;
 import android.widget.TextView;
 import android.widget.Toast;
-import android.os.Handler;
 import android.widget.ToggleButton;
-
 
 import com.github.mikephil.charting.charts.LineChart;
 import com.github.mikephil.charting.data.Entry;
 import com.github.mikephil.charting.data.LineData;
 import com.github.mikephil.charting.data.LineDataSet;
 import com.github.mikephil.charting.interfaces.datasets.ILineDataSet;
-import com.google.android.gms.common.ConnectionResult;
-import com.google.android.gms.common.api.GoogleApiClient;
-import com.google.android.gms.common.api.PendingResult;
-import com.google.android.gms.common.api.ResultCallback;
-import com.google.android.gms.wearable.DataApi;
-import com.google.android.gms.wearable.DataEvent;
-import com.google.android.gms.wearable.DataEventBuffer;
-import com.google.android.gms.wearable.PutDataMapRequest;
-import com.google.android.gms.wearable.PutDataRequest;
-import com.google.android.gms.wearable.Wearable;
 
 import java.util.ArrayList;
-import java.util.TimerTask;
 
 public class DetailActivity extends AppCompatActivity implements TempAndHumService.TempAndHumServiceListener{
     private static final String TAG = "DetailActivity";
@@ -245,6 +226,10 @@ public class DetailActivity extends AppCompatActivity implements TempAndHumServi
         unbindService(mConnection);
     }
 
+    /**
+     * Active/désactive l'IU.
+     * @param bool
+     */
     private void setUiEnabled(final boolean bool) {
         runOnUiThread(new Runnable() {
             @Override

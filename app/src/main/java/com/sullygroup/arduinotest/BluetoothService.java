@@ -35,22 +35,17 @@ public class BluetoothService extends Service {
     private static final String DEVICE_ADDRESS = "98:D3:31:FC:40:F8";
     private static final UUID PORT_UUID = UUID.fromString("00001101-0000-1000-8000-00805f9b34fb");
 
-    private String mCurrentFetchingOperation;
-
-    boolean stopThread;
-    private boolean isFetchingData = false;
-
-    private BluetoothAdapter btAdapter = null;
-    private StringBuilder mStringBuilder;
+    public static final String TAG = "BluetoothService";
 
     private ConnectingThread mConnectingThread;
     private ConnectedThread mConnectedThread;
     private SendMessageHandler sendMessageHandler;
     private Looper looper;
 
-    Handler btInHandler;
-    public static final String TAG = "BluetoothService";
-    protected boolean isWorkingWithJob = false;
+    private String mCurrentFetchingOperation;
+    boolean stopThread;
+    private BluetoothAdapter btAdapter = null;
+    private StringBuilder mStringBuilder;
 
     private BroadcastReceiver mMessageReceiver = new BroadcastReceiver() {
         @Override
@@ -60,15 +55,10 @@ public class BluetoothService extends Service {
             switch(intent.getAction())
             {
                 case TempAndHumService.EVENT_SEND_REQUEST:
-                    if(!isWorkingWithJob){
-                        isWorkingWithJob = false;
-                        command = intent.getStringExtra("command");
-                        Message msg = sendMessageHandler.obtainMessage(1,command);
-                        sendMessageHandler.sendMessage(msg);
-                    }
-                    else {
-                        Log.d(TAG,"BT Service busy");
-                    }
+                    command = intent.getStringExtra("command");
+                    Message msg = sendMessageHandler.obtainMessage(1,command);
+                    sendMessageHandler.sendMessage(msg);
+
                     break;
             }
 
@@ -224,35 +214,31 @@ public class BluetoothService extends Service {
                                 e.printStackTrace();
                             }
                             mStringBuilder = new StringBuilder();
-                            isFetchingData = false;
                             mCurrentFetchingOperation = null;
                         }
                     }
 
                 } catch (IOException ex) {
                     stopThread = true;
+                    onCatchException(ex,"erreur ?");
                 }
             }
         }
 
-        //write method
+        /**
+         * Ecrit la commande sur la socket de sortie.
+         * @param command commande à envoyer à la carte Arduino.
+         */
         void write(String command) {
-            if(!isFetchingData) {
-                try {
-                    byte[] d = new byte[30];
-                    d = command.getBytes();
-                    mmOutStream.write(d);
-                    mCurrentFetchingOperation = command;
-                    isWorkingWithJob = false;
-                    Log.d(TAG,"write");
-                } catch (IOException e) {
-                    e.printStackTrace();
-                    //Toast.makeText(this, "Error while sending request", Toast.LENGTH_SHORT).show();
-                }
-            } else {
-                Toast.makeText(getApplicationContext(), "Wait for last request to finish", Toast.LENGTH_SHORT).show();
-                Log.d(TAG,"isfetchingdata");
-                isWorkingWithJob = false;
+            try {
+                byte[] d = new byte[30];
+                d = command.getBytes();
+                mmOutStream.write(d);
+                mCurrentFetchingOperation = command;
+                Log.d(TAG,"write");
+            } catch (IOException e) {
+                e.printStackTrace();
+                //Toast.makeText(this, "Error while sending request", Toast.LENGTH_SHORT).show();
             }
         }
 
@@ -262,10 +248,8 @@ public class BluetoothService extends Service {
                 mmInStream.close();
                 mmOutStream.close();
                 looper.quit();
-            } catch (IOException e2) {
-                //insert code to deal with this
-                Log.d("DEBUG BT", e2.toString());
-                Log.d("BT SERVICE", "STREAM CLOSING FAILED, STOPPING SERVICE");
+            } catch (IOException e) {
+                onCatchException(e,"STREAM CLOSING FAILED, STOPPING SERVICE");
                 stopSelf();
             }
         }
@@ -305,6 +289,9 @@ public class BluetoothService extends Service {
         return null;
     }
 
+    /**
+     * Handler qui sert de file d'attente pour les requêtes à envoyer à l'Arduino.
+     */
     private class SendMessageHandler extends Handler {
 
         SendMessageHandler(Looper looper) {
