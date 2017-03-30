@@ -12,9 +12,10 @@ import android.support.v4.content.LocalBroadcastManager;
 class Tools {
 
     /**
-     * Envoie un message par l'intermédiaire du LocalBroadcastManager à toutes les instances qui s'y sont inscrites.
+     * Envoie un message par l'intermédiaire du LocalBroadcastManager à toutes les instances qui
+     * s'y sont inscrites.
      * @param context Context de l'application
-     * @param typeEvent Type d'évènements à evoyer {@see TempAndHumService}
+     * @param typeEvent Type d'évènement à envoyer {@see TempAndHumService}
      */
     static void sendMessage(Context context, String typeEvent) {
         Intent intent = new Intent(typeEvent);
@@ -22,7 +23,8 @@ class Tools {
     }
 
     /**
-     * Envoie un message de type EVENT_SEND_REQUEST par l'intermédiaire du LocalBroadcastManager à toutes les instances qui s'y sont inscrites.
+     * Envoie un message de type EVENT_SEND_REQUEST par l'intermédiaire du LocalBroadcastManager
+     * à toutes les instances qui s'y sont inscrites.
      * @param context Context de l'application
      * @param command La commande à envoyer pour être exécuter sur la carte Arduino
      */
@@ -32,7 +34,14 @@ class Tools {
         LocalBroadcastManager.getInstance(context).sendBroadcast(intent);
     }
 
-    public static void sendMessage(Context context,String typeEvent, float value) {
+    /**
+     * Envoie un message par l'intermédiaire du LocalBroadcastManager à toutes les instances qui s'y sont inscrites.
+     * @param context Context de l'application
+     * @param typeEvent Type d'évènement à envoyer {@see TempAndHumService}
+     * @param typeValue Type de valeur {@link TempAndHumService}
+     * @param value valeur a envoyé
+     */
+    public static void sendMessage(Context context,String typeEvent, int typeValue, float value) {
         Intent intent = new Intent(typeEvent);
         intent.putExtra("message",value);
         LocalBroadcastManager.getInstance(context).sendBroadcast(intent);

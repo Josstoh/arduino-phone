@@ -56,8 +56,13 @@ public class BluetoothService extends Service {
             {
                 case TempAndHumService.EVENT_SEND_REQUEST:
                     command = intent.getStringExtra("command");
-                    Message msg = sendMessageHandler.obtainMessage(1,command);
-                    sendMessageHandler.sendMessage(msg);
+                    if(sendMessageHandler != null) {
+                        Message msg = sendMessageHandler.obtainMessage(1,command);
+                        sendMessageHandler.sendMessage(msg);
+                    } else {
+                        stopSelf();
+                    }
+
 
                     break;
             }
@@ -80,6 +85,10 @@ public class BluetoothService extends Service {
         return super.onStartCommand(intent, flags, startId);
     }
 
+    /**
+     * Initialise la connexion BT : vérifie que celui-ci est bien activé tente de se connecter
+     * à l'appareil.
+     */
     private void BTinit() {
         btAdapter = BluetoothAdapter.getDefaultAdapter();
 
@@ -107,6 +116,9 @@ public class BluetoothService extends Service {
 
     }
 
+    /**
+     * Gère l'ouverture de la socket.
+     */
     private class ConnectingThread extends Thread {
         private final BluetoothSocket mmSocket;
         private final BluetoothDevice mmDevice;
@@ -149,7 +161,10 @@ public class BluetoothService extends Service {
         }
     }
 
-    // New Class for Connected Thread
+    /**
+     * Gère l'ouverture des streams (input et output) et si c'est un succès, gère l'envoie et la
+     * réception des données par BT avec la carte.
+     */
     private class ConnectedThread extends Thread {
         private final InputStream mmInStream;
         private final OutputStream mmOutStream;
@@ -179,6 +194,8 @@ public class BluetoothService extends Service {
             float t,h;
             stopThread = false;
             mStringBuilder = new StringBuilder();
+
+            //Boucle d'écoute sur l'input stream
             while(!Thread.currentThread().isInterrupted() && !stopThread) {
                 try {
                     int byteCount = mmInStream.available();
@@ -192,14 +209,14 @@ public class BluetoothService extends Service {
                         if(string.contains("\n")) {
                             try{
                                 switch(mCurrentFetchingOperation) {
-                                    /*case DetailActivity.TEMPERATURE_CMD :
+                                    case TempAndHumService.TEMPERATURE_CMD :
                                         t = Float.parseFloat(mStringBuilder.toString());
-                                        Tools.sendMessage(getApplicationContext(),TempAndHumService.EVENT_TEMP_RECEIVED,t);
+                                        Tools.sendMessage(getApplicationContext(),TempAndHumService.EVENT_RESPONSE_RECEIVED,TempAndHumService.TYPE_TEMP,t);
                                         break;
-                                    case DetailActivity.HUMIDITY_CMD:
+                                    case TempAndHumService.HUMIDITY_CMD:
                                         h = Float.parseFloat(mStringBuilder.toString());
-                                        Tools.sendMessage(getApplicationContext(),TempAndHumService.EVENT_HUM_RECEIVED,h);
-                                        break;*/
+                                        Tools.sendMessage(getApplicationContext(),TempAndHumService.EVENT_RESPONSE_RECEIVED,TempAndHumService.TYPE_HUM,h);
+                                        break;
                                     case TempAndHumService.TEMP_AND_HUM_CMD:
                                         String[] results = mStringBuilder.toString().split(";");
                                         t = Float.parseFloat(results[0]);

@@ -1,0 +1,6 @@
+Architecture de l'application :
+DetailActivity est l'unique activité de l'application démarrer lorsqu'on lance l'application. Elle
+ne fait que présenter l'interface pour se connecter et intérargir avec la carte Arduino.
+Quand on clique sur "Connect", cela lance le service TempAndHumService qui s'occuper de tout ce qui
+est échangé entre le téléphone, la carte Arduino et la montre connecté. C'est elle qui lance le service
+BluetoothService pour gérer la partie échange de message Bluetooth à bas niveau.
