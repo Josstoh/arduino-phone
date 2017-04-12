@@ -4,11 +4,13 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
+import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.os.Bundle;
 import android.os.IBinder;
 import android.support.v7.app.AppCompatActivity;
 import android.util.Log;
+import android.util.SparseArray;
 import android.util.TypedValue;
 import android.view.View;
 import android.widget.Button;
@@ -23,9 +25,18 @@ import com.github.mikephil.charting.charts.LineChart;
 import com.github.mikephil.charting.data.Entry;
 import com.github.mikephil.charting.data.LineData;
 import com.github.mikephil.charting.data.LineDataSet;
+import com.github.mikephil.charting.formatter.IFillFormatter;
+import com.github.mikephil.charting.interfaces.dataprovider.LineDataProvider;
 import com.github.mikephil.charting.interfaces.datasets.ILineDataSet;
 
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Calendar;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.Locale;
+import java.util.Map;
 
 public class DetailActivity extends AppCompatActivity implements TempAndHumService.TempAndHumServiceListener{
     private static final String TAG = "DetailActivity";
@@ -43,6 +54,10 @@ public class DetailActivity extends AppCompatActivity implements TempAndHumServi
                     if(tahService.isConnectedToDevice()) {
                         onConnected();
                     }
+                    SharedPreferences sharedPref = getPreferences(Context.MODE_PRIVATE);
+                    boolean isAutoUpdating = sharedPref.getBoolean(getString(R.string.preference_auto_update),false);
+                    tahService.setAutoUpdate(isAutoUpdating);
+                    mTemperatureButton.setChecked(isAutoUpdating);
                     break;
             }
         }
@@ -64,8 +79,10 @@ public class DetailActivity extends AppCompatActivity implements TempAndHumServi
     TempAndHumService tahService;
     private Intent tahServiceIntent;
 
-    private ArrayList<Integer> mTemperatureArray;
-    private ArrayList<Integer> mHumidityArray;
+    private SparseArray<Integer> mTemperatureArray;
+    private SparseArray<Integer> mHumidityArray;
+    private SparseArray<Long> correspondanceHeure;
+    private int timeID = -1;
     private LineChart mChart;
     private Button mConnectButton;
     private Button mDisconnectButton;
@@ -178,8 +195,9 @@ public class DetailActivity extends AppCompatActivity implements TempAndHumServi
         });
 
         setUiEnabled(false);
-        mTemperatureArray = new ArrayList<>();
-        mHumidityArray = new ArrayList<>();
+        mTemperatureArray = new SparseArray<>();
+        mHumidityArray = new SparseArray<>();
+        correspondanceHeure = new SparseArray<>();
 
         initChart();
         clearChart();
@@ -216,6 +234,15 @@ public class DetailActivity extends AppCompatActivity implements TempAndHumServi
         if(TempAndHumService.isRunning()){
             bindService(tahServiceIntent, mConnection,Context.BIND_AUTO_CREATE);
         }
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        SharedPreferences sharedPref = getPreferences(Context.MODE_PRIVATE);
+        SharedPreferences.Editor editor = sharedPref.edit();
+        editor.putBoolean(getString(R.string.preference_auto_update),mTemperatureButton.isChecked());
+        editor.apply();
     }
 
     @Override
@@ -257,20 +284,24 @@ public class DetailActivity extends AppCompatActivity implements TempAndHumServi
         //mChart.setScaleEnabled(true);
         mChart.setScaleXEnabled(true);
         mChart.setScaleYEnabled(false);
+        mChart.getXAxis().setGranularity(1f);
+        mChart.getXAxis().setValueFormatter(new HourAxisFormatter(mChart,this));
     }
 
     private void refreshChart() {
         ArrayList<Entry> temperatureDataset = new ArrayList<>();
         if(mTemperatureArray.size() > 0) {
             for (int i = 0; i < mTemperatureArray.size(); i++) {
-                temperatureDataset.add(new Entry(i, mTemperatureArray.get(i)));
+                int key = mTemperatureArray.keyAt(i);
+                temperatureDataset.add(new Entry(key, mTemperatureArray.get(key)));
             }
         }
 
         ArrayList<Entry> humidityDataset = new ArrayList<>();
         if(mHumidityArray.size() > 0) {
             for (int i = 0; i < mHumidityArray.size(); i++) {
-                humidityDataset.add(new Entry(i, mHumidityArray.get(i)));
+                int key = mHumidityArray.keyAt(i);
+                humidityDataset.add(new Entry(key, mHumidityArray.get(key)));
             }
         }
 
@@ -330,14 +361,14 @@ public class DetailActivity extends AppCompatActivity implements TempAndHumServi
     @Override
     public void onTempResponse(float msg) {
         int temp = (int) msg;
-        mTemperatureArray.add(temp);
+        mTemperatureArray.put(timeID,temp);
         refreshChart();
     }
 
     @Override
     public void onHumResponse(float msg) {
         int hum = (int) msg;
-        mHumidityArray.add(hum);
+        mHumidityArray.put(timeID,hum);
         refreshChart();
     }
 
@@ -353,4 +384,15 @@ public class DetailActivity extends AppCompatActivity implements TempAndHumServi
         unbindService(mConnection);
         setUiEnabled(false);
     }
+
+    @Override
+    public void updateTime() {
+        correspondanceHeure.put(++timeID,System.currentTimeMillis());
+    }
+
+    long getTime(int key){
+        Long value = correspondanceHeure.get(key);
+        return value == null ? -1 : value;
+    }
+
 }

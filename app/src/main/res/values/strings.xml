@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">RAILTECH</string>
+    <string name="preference_auto_update">com.sullygroup.arduinotest.PREFERENCE_AUTO_UPDATE</string>
 </resources>

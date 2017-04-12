@@ -12,11 +12,13 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.os.Binder;
 import android.os.Bundle;
 import android.os.IBinder;
 import android.os.PersistableBundle;
+import android.preference.PreferenceManager;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 import android.support.v4.content.LocalBroadcastManager;
@@ -88,6 +90,7 @@ public class TempAndHumService extends Service implements GoogleApiClient.Connec
     private boolean isAutoUpdating = false;
     private final IBinder mBinder = new LocalBinder();
     private TempAndHumServiceListener activity;
+    private TempAndHumService _this = this;
     /**
      * BroadcastReceiver qui reçoit les messages envoyer grâce au LocalBroadcastManager.
      */
@@ -104,6 +107,8 @@ public class TempAndHumService extends Service implements GoogleApiClient.Connec
                         activity.onConnected();
                     break;
                 case EVENT_RESPONSE_RECEIVED:
+                    if(activity != null)
+                        activity.updateTime();
                     t = intent.getFloatExtra("temp",-100f);
                     if(t != -100){
                         temp = (int) t;
@@ -297,7 +302,7 @@ public class TempAndHumService extends Service implements GoogleApiClient.Connec
             PersistableBundle bundle = new PersistableBundle(1);
             bundle.putString("command",TEMP_AND_HUM_CMD);
             builder.setExtras(bundle);
-            builder.setPeriodic(5000);
+            builder.setPeriodic(10000);
             if( mJobScheduler.schedule( builder.build() ) <= 0 ) {
                 //If something goes wrong
                 Log.d(TAG,"JobScheduler : Something went wrong...");
@@ -522,5 +527,11 @@ public class TempAndHumService extends Service implements GoogleApiClient.Connec
          * On prévient que le service va s'arrêter.
          */
         void onServiceClosing();
+
+        /**
+         * Préviens l'activity de mettre à jour l'heure de capture de la temp et de l'hum
+         * pour un prochain relevé
+         */
+        void updateTime();
     }
 }
