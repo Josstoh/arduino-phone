@@ -62,11 +62,8 @@ public class BluetoothService extends Service {
                     } else {
                         stopSelf();
                     }
-
-
                     break;
             }
-
         }
     };
 
@@ -108,7 +105,7 @@ public class BluetoothService extends Service {
                 mConnectingThread.start();
             }
         } catch (IllegalArgumentException e) {
-                onCatchException(e,"ILLEGAL MAC ADDRESS, STOPPING SERVICE");
+            onCatchException(e,"ILLEGAL MAC ADDRESS, STOPPING SERVICE");
         } catch (Exception e) {
             onCatchException(e,"BT not activated");
         }
@@ -146,8 +143,7 @@ public class BluetoothService extends Service {
                     mmSocket.close();
                     onCatchException(e, "SOCKET CONNECTION FAILED, STOPPING SERVICE");
                 } catch (IOException e2) {
-                    Log.d(TAG, "SOCKET CLOSING FAILED, STOPPING SERVICE");
-                    stopSelf();
+                    onCatchException(e2, "SOCKET CLOSING FAILED, STOPPING SERVICE");
                 }
             }
         }

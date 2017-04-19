@@ -97,7 +97,7 @@ public class SeekBarHint extends AppCompatSeekBar implements SeekBar.OnSeekBarCh
     @Override
     protected void onDraw(Canvas c) {
         super.onDraw(c);
-        DetailActivity activity = (DetailActivity) getContext();
+        MainActivity activity = (MainActivity) getContext();
         if(isMoving){
 
             int thumb_x = (int)(( (double)this.getProgress()/this.getMax() ) * (double)this.getWidth());

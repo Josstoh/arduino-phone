@@ -27,9 +27,9 @@ public class HourAxisFormatter implements IAxisValueFormatter
 
     private SparseArray<String> labels;
     private BarLineChartBase<?> chart;
-    private DetailActivity activity;
+    private MainActivity activity;
 
-    public HourAxisFormatter(BarLineChartBase<?> chart,DetailActivity mActivity) {
+    public HourAxisFormatter(BarLineChartBase<?> chart,MainActivity mActivity) {
         this.chart = chart;
         activity = mActivity;
         labels = new SparseArray<>();

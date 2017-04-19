@@ -15,6 +15,7 @@ import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.os.Binder;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.IBinder;
 import android.os.PersistableBundle;
@@ -80,6 +81,8 @@ public class TempAndHumService extends Service implements GoogleApiClient.Connec
     public static  final int TEMP_AND_HUM_JOB_ID = 0;
     public static  final int ROTATE_JOB_ID = 1;
     public static  final int LED_COLOR_JOB_ID = 2;
+
+    public static final long DELAIS_RAFFRAICHISSEMENT_TEMP_AND_HUM = 10000;
 // -------------------------------------------------------------------------------------
     private NotificationManager mNM;
     private int idNotification = 2;
@@ -124,6 +127,12 @@ public class TempAndHumService extends Service implements GoogleApiClient.Connec
                             activity.onHumResponse(h);
                         updateDataItem(TYPE_HUM, hum);
                         showNotification();
+                    }
+                    // Pour Android N et >, contrer la limitation à 15min et +
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                        if(isAutoUpdating) {
+                            scheduleTempAndHumCMD(DELAIS_RAFFRAICHISSEMENT_TEMP_AND_HUM);
+                        }
                     }
                     break;
                 case EVENT_BTSERVICE_FAILED:
@@ -296,17 +305,7 @@ public class TempAndHumService extends Service implements GoogleApiClient.Connec
      */
     public void setAutoUpdate(boolean b) {
         if(b && !isAutoUpdating) {
-            JobInfo.Builder builder = new JobInfo.Builder( TEMP_AND_HUM_JOB_ID,
-                    new ComponentName( getPackageName(),
-                            TempAndHumJobScheduler.class.getName() ) );
-            PersistableBundle bundle = new PersistableBundle(1);
-            bundle.putString("command",TEMP_AND_HUM_CMD);
-            builder.setExtras(bundle);
-            builder.setPeriodic(10000);
-            if( mJobScheduler.schedule( builder.build() ) <= 0 ) {
-                //If something goes wrong
-                Log.d(TAG,"JobScheduler : Something went wrong...");
-            }
+            scheduleTempAndHumCMD(1);
             isAutoUpdating = true;
         }
         else if(!b && isAutoUpdating) {
@@ -329,14 +328,14 @@ public class TempAndHumService extends Service implements GoogleApiClient.Connec
     private Notification getNotification() {
         String txTemp;
         txTemp = "Temp.:";
-        txTemp += (temp==-1) ? "N/A ": temp+"C°\n";
+        txTemp += (temp==-1) ? "N/A ": temp+"C° ";
         txTemp += "Hum.:";
-        txTemp += (hum==-1) ? "N/A ": hum+"%\n";
+        txTemp += (hum==-1) ? "N/A ": hum+"% ";
         txTemp += "Rot.:";
-        txTemp += (rotate==-1) ? "N/A ": rotate+"°\n";
+        txTemp += (rotate==-1) ? "N/A ": rotate+"°";
 
         PendingIntent contentIntent = PendingIntent.getActivity(this, 0,
-                new Intent(this, DetailActivity.class), 0);
+                new Intent(this, MainActivity.class), 0);
         Intent stop = new Intent(this, TempAndHumService.class);
         stop.setAction("STOP_SERVICE");
         PendingIntent stopIntent = PendingIntent.getService(this, 0, stop , 0);
@@ -504,6 +503,32 @@ public class TempAndHumService extends Service implements GoogleApiClient.Connec
     }
 
     /**
+     * Envoye une reqûete à la carte Arduino pour obtenir la température et l'humidité actuelles du capteur.
+     */
+    public void requestTempAndHum() {
+        Tools.sendCommand(getApplicationContext(),TEMP_AND_HUM_CMD);
+    }
+
+    protected void scheduleTempAndHumCMD(long latency) {
+        JobInfo.Builder builder = new JobInfo.Builder( TEMP_AND_HUM_JOB_ID,
+                new ComponentName( getPackageName(),
+                        TempAndHumJobScheduler.class.getName() ) );
+        PersistableBundle bundle = new PersistableBundle(1);
+        bundle.putString("command",TEMP_AND_HUM_CMD);
+        builder.setExtras(bundle);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            builder.setMinimumLatency(latency);
+        } else {
+            builder.setPeriodic(DELAIS_RAFFRAICHISSEMENT_TEMP_AND_HUM);
+        }
+
+        if( mJobScheduler.schedule( builder.build() ) <= 0 ) {
+            //If something goes wrong
+            Log.d(TAG,"JobScheduler : Something went wrong...");
+        }
+    }
+
+    /**
      * Interface implémentée par l'activité pour avoir des retours sur ce que fait le service et les MAJs de données.
      */
     interface TempAndHumServiceListener{
@@ -511,18 +536,22 @@ public class TempAndHumService extends Service implements GoogleApiClient.Connec
          * Le service est lancé et connecté à l'Arduino grâce au BTService.
          */
         void onConnected();
+
         /**
          * Une réponse de l'Arduino contenant la température à été reçu.
          */
         void onTempResponse(float msg);
+
         /**
          * Une réponse de l'Arduino contenant l'humidité à été reçu.
          */
         void onHumResponse(float msg);
+
         /**
          * L'angle de rotation a été modifié, on prévient l'activité pour MAJ.
          */
         void updateRotate(int angle);
+
         /**
          * On prévient que le service va s'arrêter.
          */
